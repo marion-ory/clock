@@ -16,6 +16,8 @@ en_pause = False
 def afficher_heure(heure):
     global heure_manuelle
     heure_manuelle = heure
+    h, m, s = heure
+    print(f"{h:02d}:{m:02d}:{s:02d}")
 
 def regler_alarme(heure_choisie):
     global heure_alarme, alarme_declenchee
@@ -112,11 +114,17 @@ def horloge():
                     except:
                         print("[ERREUR] Impossible de lire le fichier mp3 :/")
 
-                # Mise en forme de l'heure uniquement
-                current_time_format = "%H:%M:%S" if is_24_hour_format else "%I:%M:%S %p"
-                current_time = strftime(current_time_format)
+                # Mise en forme de l'heure via la logique de la fonction demandée
+                # Note: ici on récupère le tuple pour l'afficher
+                current_time_tuple = (h, m, s)
                 
-                print(f"Heure: {current_time}", end="\r")
+                # On utilise le formatage direct hh:mm:ss comme demandé
+                if is_24_hour_format:
+                    print(f"Heure: {h:02d}:{m:02d}:{s:02d}", end="\r")
+                else:
+                    # Gestion du format 12h si activé
+                    current_time = strftime("%I:%M:%S %p")
+                    print(f"Heure: {current_time}", end="\r")
             
             time_library.sleep(1)
             
@@ -128,6 +136,12 @@ print("--- CONFIGURATION DE L'HORLOGE ---")
 
 format_choisi = input("Format d'affichage (12h ou 24h) : ").strip().lower()
 choisir_mode_affichage(format_choisi)
+
+print("\nRéglage manuel de l'heure de départ (pour affichage initial) :")
+h_start = int(input("Heure : "))
+m_start = int(input("Minutes : "))
+s_start = int(input("Secondes : "))
+afficher_heure((h_start, m_start, s_start))
 
 print("\nRéglage de l'alarme :")
 h_alarme = int(input("Heure (0-23) : "))

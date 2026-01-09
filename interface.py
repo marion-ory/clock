@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import datetime
 import time
-import pygame  # Utilisé ici pour l'alarme ET le son de la vidéo
+import pygame 
 from tkvideo import tkvideo
 
 # INITIALISATION AUDIO
@@ -13,159 +13,172 @@ is_24_hour_format = True
 alarm_time = None
 pause = False
 pause_click_count = 0  # Compteur pour le bouton pause
+heure_manuelle_forcee = None # Pour stocker l'heure réglée par afficher_heure
 
 root = tk.Tk()
 root.title("Horloge Interactive")
 
 # --- AJOUT DU FOND D'ÉCRAN ---
-# On charge les deux images au démarrage
 image_fond1 = tk.PhotoImage(file="fond.png")
 try:
     image_fond2 = tk.PhotoImage(file="fond2.png")
 except:
-    # Au cas où le fichier fond2.jpg pose problème avec PhotoImage (nécessite parfois PIL pour le JPG pur)
-    # On garde la même par défaut ou on gère l'erreur
     image_fond2 = image_fond1 
 
 background_label = tk.Label(root, image=image_fond1)
-background_label.place(relwidth=1, relheight=1) # L'image prend toute la place
+background_label.place(relwidth=1, relheight=1)
 # ------------------------------
 
-# Affichage de l'heure
-label_time = tk.Label(root, font=("Arial", 40, "bold"), fg="black", bg="white")
-label_time.pack(padx=20, pady=5)
+# --- ZONE D'AFFICHAGE CENTRALE (HEURE + ROUAGE) ---
+frame_horloge = tk.Frame(root, bg="white", bd=2, relief="ridge")
+frame_horloge.pack(pady=20)
 
-# FONCTION FORMAT 12/24H
+label_time = tk.Label(frame_horloge, font=("Arial", 40, "bold"), fg="black", bg="white")
+label_time.pack(side="left", padx=(20, 5), pady=5)
+
+# Chargement de l'icône engrenage avec réduction de taille accrue
+try:
+    # .subsample(3, 3) divise la taille par 3.
+    img_rouage = tk.PhotoImage(file="engrenage.png").subsample(3, 3)
+except:
+    # Si l'image n'existe pas, on met un texte simple "*"
+    img_rouage = None
+
+def ouvrir_reglages(event=None):
+    # Bascule l'affichage du panneau de modification
+    if frame_manual.winfo_viewable():
+        frame_manual.pack_forget()
+    else:
+        frame_manual.pack(pady=10, padx=10)
+
+btn_rouage = tk.Label(frame_horloge, image=img_rouage, text="⚙" if not img_rouage else "", 
+                      font=("Arial", 20), bg="white", cursor="hand2")
+btn_rouage.pack(side="left", padx=(5, 15))
+btn_rouage.bind("<Button-1>", ouvrir_reglages)
+
+
+def afficher_heure(heure):
+    global heure_manuelle_forcee
+    heure_manuelle_forcee = heure
+    h, m, s = heure
+    suf = ""
+    display_h = h
+    if not is_24_hour_format:
+        suf = " AM" if h < 12 else " PM"
+        display_h = h % 12
+        if display_h == 0: display_h = 12
+    hour_string = f"{display_h:02d}:{m:02d}:{s:02d}{suf}"
+    label_time.config(text=hour_string)
+
+def modifier_heure_interface():
+    try:
+        h = int(entry_h_man.get())
+        m = int(entry_m_man.get())
+        s = int(entry_s_man.get())
+        if 0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59:
+            afficher_heure((h, m, s))
+            frame_manual.pack_forget() # Cache le menu après validation
+        else:
+            raise ValueError
+    except ValueError:
+        messagebox.showerror("Erreur", "Format invalide (H: 0-23, M/S: 0-59)")
+
 def time_format():
     global is_24_hour_format
     is_24_hour_format = not is_24_hour_format
-    
-    # Changement du texte du bouton
     time_format_button.config(text="Passer en 12H" if is_24_hour_format else "Passer en 24H")
-    
-    # CHANGEMENT DU FOND LORS DU CLIC
-    if not is_24_hour_format:
-        background_label.config(image=image_fond2)
-    else:
-        background_label.config(image=image_fond1)
+    background_label.config(image=image_fond2 if not is_24_hour_format else image_fond1)
 
-# Bouton format
 time_format_button = ttk.Button(root, text="Passer en 12H", command=time_format)
-time_format_button.pack(pady=10)
+time_format_button.pack(pady=5)
 
-# FONCTION LECTURE VIDÉO ET FERMETURE
 def play_stop_video():
-    # On crée une nouvelle fenêtre en plein écran pour la vidéo
     top = tk.Toplevel(root)
     top.attributes("-fullscreen", True)
     video_label = tk.Label(top)
     video_label.pack(expand=True, fill="both")
-    
-    # Lancement du SON en premier via pygame
     try:
         pygame.mixer.music.load("stopit.mp3")
         pygame.mixer.music.play()
     except:
-        print("Erreur : stopit.mp3 introuvable")
-
-    # Lancement de la VIDÉO
+        pass
     player = tkvideo("stopit.mp4", video_label, loop=0, size=(root.winfo_screenwidth(), root.winfo_screenheight()))
     player.play()
-    
-    # On ferme tout après 19 secondes
-    root.after(19000, root.destroy)
+    root.after(20000, root.destroy)
 
-# FONCTION PRINCIPALE D'AFFICHAGE
 def print_time():
-    global pause
-    global alarm_time
-
+    global pause, alarm_time, heure_manuelle_forcee
     if not pause:
-        now = datetime.datetime.now()
-        h = now.hour
-        m = now.minute
-        s = now.second
-        suf = ""
+        if heure_manuelle_forcee is None:
+            now = datetime.datetime.now()
+            h, m, s = now.hour, now.minute, now.second
+        else:
+            h, m, s = heure_manuelle_forcee
+            s += 1
+            if s >= 60: s = 0; m += 1
+            if m >= 60: m = 0; h += 1
+            if h >= 24: h = 0
+            heure_manuelle_forcee = (h, m, s)
 
-        # Verifier l'alarme
         if alarm_time and h == alarm_time[0] and m == alarm_time[1] and s == 0:
             try:
                 pygame.mixer.music.load("alarme.mp3")
                 pygame.mixer.music.play()
-            except:
-                pass
+            except: pass
             messagebox.showwarning("Rappel", "Jeannine tes médicaments !")
             alarm_time = None 
 
-        # Conversion format 12h
         display_h = h
+        suf = ""
         if not is_24_hour_format:
             suf = " AM" if h < 12 else " PM"
-            display_h = h % 12
-            if display_h == 0:
-                display_h = 12
+            display_h = h % 12 if h % 12 != 0 else 12
 
-        hour_string = f"{display_h:02d}:{m:02d}:{s:02d}{suf}"
-        label_time.config(text=hour_string)
-
-    # Rappel de la fonction toutes les secondes
+        label_time.config(text=f"{display_h:02d}:{m:02d}:{s:02d}{suf}")
     label_time.after(1000, print_time)
 
-# FONCTION PAUSE / REPRISE
 def rest():
-    global pause
-    global pause_click_count
-    
+    global pause, pause_click_count
     pause_click_count += 1
-    
-    # Se déclenche à partir de 6 clics
     if pause_click_count >= 6:
         rest_button.config(state="disabled")
         play_stop_video()
         return
+    pause = not pause
+    rest_button.config(text="Reprendre" if pause else "Pause")
 
-    if not pause:
-        pause = True
-        rest_button.config(text="Reprendre")
-        print("[PAUSE] ZA WARUDO !!!!")
-    else:
-        pause = False
-        rest_button.config(text="Pause")
-        print("[LECTURE] Le temps reprend son cours.")
-
-# FONCTION REGLAGE ALARME
 def set_alarm():
     global alarm_time
     try:
-        h = int(entry_h.get())
-        m = int(entry_m.get())
+        h, m = int(entry_h.get()), int(entry_m.get())
         if 0 <= h <= 23 and 0 <= m <= 59:
             alarm_time = (h, m)
-            messagebox.showinfo("Alarme activée", f"Alarme réglée pour {h:02d}:{m:02d}")
-        else:
-            raise ValueError
+            messagebox.showinfo("Alarme", f"Alarme réglée pour {h:02d}:{m:02d}")
+        else: raise ValueError
     except ValueError:
-        messagebox.showerror("Erreur", "Format invalide (H: 0-23, M: 0-59)")
+        messagebox.showerror("Erreur", "Format invalide")
+
+# INTERFACE MODIFIER L'HEURE (Cachée par défaut)
+frame_manual = ttk.LabelFrame(root, text="Modifier l'heure")
+# On ne le pack pas immédiatement
+
+ttk.Label(frame_manual, text="H:").grid(row=0, column=0)
+entry_h_man = ttk.Entry(frame_manual, width=4); entry_h_man.grid(row=0, column=1, padx=2)
+ttk.Label(frame_manual, text="M:").grid(row=0, column=2)
+entry_m_man = ttk.Entry(frame_manual, width=4); entry_m_man.grid(row=0, column=3, padx=2)
+ttk.Label(frame_manual, text="S:").grid(row=0, column=4)
+entry_s_man = ttk.Entry(frame_manual, width=4); entry_s_man.grid(row=0, column=5, padx=2)
+ttk.Button(frame_manual, text="Valider", command=modifier_heure_interface).grid(row=1, column=0, columnspan=6, pady=5)
 
 # INTERFACE ALARME
-frame_alarm = ttk.Frame(root)
-frame_alarm.pack(pady=10)
+frame_alarm = ttk.LabelFrame(root, text="Réglage Alarme")
+frame_alarm.pack(pady=10, padx=10)
+entry_h = ttk.Entry(frame_alarm, width=5); entry_h.grid(row=0, column=1)
+entry_m = ttk.Entry(frame_alarm, width=5); entry_m.grid(row=0, column=3)
+ttk.Button(frame_alarm, text="Activer l'alarme", command=set_alarm).grid(row=1, column=0, columnspan=4, pady=5)
 
-ttk.Label(frame_alarm, text="H:").grid(row=0, column=0)
-entry_h = ttk.Entry(frame_alarm, width=5)
-entry_h.grid(row=0, column=1, padx=5)
-
-ttk.Label(frame_alarm, text="M:").grid(row=0, column=2)
-entry_m = ttk.Entry(frame_alarm, width=5)
-entry_m.grid(row=0, column=3, padx=5)
-
-alarm_button = ttk.Button(root, text="Activer l'alarme", command=set_alarm)
-alarm_button.pack(pady=5)
-
-# INTERFACE BOUTON PAUSE
 rest_button = ttk.Button(root, text="Pause", command=rest)
 rest_button.pack(pady=10)
 
-# Lancement
 print_time()
 root.mainloop()
